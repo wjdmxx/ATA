@@ -2,6 +2,7 @@
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from decimal import Decimal
 import json
 import os
 from pathlib import Path
@@ -31,7 +32,7 @@ def make_plan(settings, output):
                     configs = [str(ROOT / data_config), str(ROOT / f"configs/{method}.yaml")]
                     overrides = [f"model.name={model}",
                                  f"model.checkpoint=weights/pretrained/vittt_{model}.pth",
-                                 "method.optimizer.name=sgd", f"method.optimizer.lr={lr}",
+                                 "method.optimizer.name=sgd", f"method.optimizer.lr={Decimal(str(lr)):f}",
                                  "method.optimizer.momentum=0.9", "method.optimizer.weight_decay=0.0",
                                  "data.batch_size=64", "run.save_weights=none",
                                  f"run.seed={seed}", f"run.name={name}", f"run.output={output / 'runs'}"]
