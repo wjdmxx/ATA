@@ -153,6 +153,15 @@ python run.py --config configs/test_5k.yaml configs/infomax.yaml \
 
 所有方法目前用 FP32；默认超参数是可运行起点，尚未在 extra 域调优。批量扫参直接写 shell 循环即可；每个进程对应一个完整数据流，多张卡并行不同实验，例如 `CUDA_VISIBLE_DEVICES=1 python run.py ...`，进程内仍使用 `run.device=cuda:0`。
 
+`sweep.py` 提供多卡排队入口，网格保存在 `configs/sweep_50k.yaml`。当前包含 B 的 Tent / InfoMax / Lambda、S 的 Lambda，每组 3 个学习率 × 3 个 seed × test/val，共 72 次；都是每域 50K、severity 5、batch 64、SGD。六条队列按预计耗时均衡分配，各卡按 seed 0 → 1 → 2 独立执行，当前任务完成后立即进入下一项。每项经 holder 自动释放和恢复 GPU，单项失败会记录并继续后续任务。
+
+```bash
+python sweep.py --dry-run
+python -u sweep.py --output outputs/sweep_50k --controller-pid <当前holder的PID>
+```
+
+在 tmux 中启动队列即可离开。队列目录的 `status.json` 记录每项任务的命令、GPU、状态、退出码和结果路径，`logs/` 保留启动日志，`runs/` 下每次实验仍使用独立目录。可以随时执行 `python summarize.py outputs/sweep_50k/runs` 汇总当前结果；六条队列各自结束时也会刷新汇总。Ctrl-C / SIGTERM 会停止排队并交给 holder 恢复占用。
+
 ## 方法和状态协议
 
 - **Source**：不做外部适应，原始 TTT 计算照常执行。

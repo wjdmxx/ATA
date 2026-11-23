@@ -1,0 +1,23 @@
+# 4 model/method combinations × 3 learning rates × 3 seeds × 2 splits = 72 runs.
+gpus: [2, 3, 4, 5, 6, 7]
+seeds: [0, 1, 2]               # Queue in seed order; each GPU advances independently.
+data_configs:
+  test: configs/test_50k.yaml
+  val: configs/val_50k.yaml
+experiments:
+  - model: base
+    method: tent
+    learning_rates: [0.00001, 0.00003, 0.0001]
+    minutes_per_domain: 3.5   # Scheduling estimate only; does not change the experiment.
+  - model: base
+    method: infomax
+    learning_rates: [0.0003, 0.001, 0.003]
+    minutes_per_domain: 3.5
+  - model: base
+    method: lambda
+    learning_rates: [0.1, 0.3, 1.0]
+    minutes_per_domain: 4.0
+  - model: small
+    method: lambda
+    learning_rates: [0.1, 0.3, 1.0]
+    minutes_per_domain: 1.6
