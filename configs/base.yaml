@@ -1,0 +1,56 @@
+# All paths below are relative to ATA/, regardless of output directory.
+model:
+  name: tiny                    # tiny | small | base
+  checkpoint: weights/pretrained/vittt_tiny.pth
+  checkpoint_key: model          # model | state_dict | state_dict_ema
+
+data:
+  name: imagenet_c              # imagenet_c | imagenet (clean validation set)
+  root: /mnt/bit/data/imagenet-c
+  group: standard               # standard: 15 test domains; extra: 4 validation domains; clean: ImageNet
+  domains: null                 # null = every domain in group, or an explicit subset
+  severities: [5]               # use [1, 2, 3, 4, 5] for all levels
+  samples: 5000                 # PER domain/severity; or over the clean validation set
+  sampling: balanced            # 5K = 5/class; 50K = 50/class; random also supported
+  shuffle: true
+  manifest: null                # reuse an existing run's samples.json exactly
+  batch_size: 64
+  workers: 4
+
+  # ImageNet-C: CenterCrop -> ToTensor -> Normalize (images are already 224x224).
+  # Clean ImageNet presets add Resize(256) before CenterCrop.
+  resize: null                  # null = skip Resize
+  interpolation: bicubic
+  center_crop: 224
+  mean: [0.485, 0.456, 0.406]
+  std: [0.229, 0.224, 0.225]
+
+method:
+  name: source                  # source | tent | infomax | lambda
+  parameters: norm              # Tent/InfoMax: norm | all; Lambda always updates theta only
+  steps: 1
+  prediction: before_update     # final inner forward, before final optimizer step
+  diversity_weight: 1.0         # InfoMax: H(Y|X) - weight * H(Y)
+  lambda_max: 1.0               # Lambda: lambda = lambda_max * tanh(theta); theta starts at 0
+  branches:                    # Enable Lambda loss shaping; original model branches stay present
+    swiglu: true
+    conv: true
+  layers: all                  # Lambda: all actual blocks, or zero-based indices, e.g. [0, 1, 11]
+  optimizer:
+    name: sgd
+    lr: 0.001                   # starting value, NOT a tuned/reproduced result
+    momentum: 0.9
+    weight_decay: 0.0
+    betas: [0.9, 0.999]
+
+protocol:
+  reset: task                   # task=domain+severity | domain | batch | never
+
+run:
+  name: source_tiny
+  output: outputs
+  device: cuda:0                # cpu also supported; all adaptation uses FP32
+  seed: 0                       # one seed for sample selection, stream order and runtime RNG
+  deterministic: true
+  log_every: 20
+  save_weights: none            # none: no checkpoint files or folder | last | task

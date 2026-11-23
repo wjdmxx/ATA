@@ -1,0 +1,11 @@
+method:
+  name: lambda
+  parameters: theta             # Only theta; original weights and all LayerNorms frozen
+  lambda_max: 1.0
+  branches:
+    swiglu: true
+    conv: true
+  layers: all                    # Or zero-based block indices, e.g. [0, 1, 11]
+  diversity_weight: 1.0          # Outer InfoMax: mean entropy - entropy of mean prediction
+run:
+  name: lambda_tiny

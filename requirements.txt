@@ -1,0 +1,8 @@
+# Validated with Python 3.10. GPU wheels: see README for the cu124 index.
+torch==2.5.1
+torchvision==0.20.1
+timm==0.4.12
+numpy==1.23.5
+Pillow==12.3.0
+PyYAML==6.0.4
+yacs==0.1.8

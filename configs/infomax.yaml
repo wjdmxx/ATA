@@ -1,0 +1,5 @@
+method:
+  name: infomax
+  parameters: norm
+run:
+  name: infomax_tiny

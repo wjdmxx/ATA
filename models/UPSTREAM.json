@@ -1,0 +1,10 @@
+{
+  "repository": "https://github.com/LeapLabTHU/ViTTT",
+  "commit": "36eb23bfe2eca5cd4ad9ce01ef93bf8a89c6020f",
+  "source_directory": "vittt/models",
+  "files_sha256": {
+    "vittt.py": "86861c332eac2aeb41c3fe83cf83b1d8ccef7861d0618a2caf45b59abb1806e7",
+    "ttt_block.py": "e48416ae6ae54e49721c83b4eeedd8320f843907715f7062526ca4d8ad8d04de"
+  },
+  "note": "Copied byte-for-byte. No architecture, parameters, or forward/inner-update changes."
+}

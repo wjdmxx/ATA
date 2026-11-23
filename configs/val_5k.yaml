@@ -1,0 +1,4 @@
+data:
+  group: extra
+  samples: 5000
+  resize: null                  # CenterCrop(224) -> ToTensor -> Normalize

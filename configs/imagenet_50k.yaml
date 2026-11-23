@@ -1,0 +1,10 @@
+data:
+  name: imagenet
+  root: /mnt/bit/data/imagenet/images/val
+  group: clean
+  domains: null
+  severities: []
+  samples: 50000
+  resize: 256                   # Resize(256) -> CenterCrop(224) -> ToTensor -> Normalize
+run:
+  name: imagenet_50k
