@@ -1,0 +1,30 @@
+# S/B × EATA/SAR/DeYO × 6 learning rates × seed 0 = 36 validation runs.
+gpus: [4, 5, 6, 7]
+seeds: [0]
+data_configs:
+  val: configs/val_50k.yaml
+experiments:
+  - model: base
+    method: eata
+    learning_rates: [0.00001, 0.00003, 0.0001, 0.0003, 0.001, 0.003]
+    minutes_per_domain: 3.5   # Scheduling estimate only.
+  - model: base
+    method: sar
+    learning_rates: [0.00001, 0.00003, 0.0001, 0.0003, 0.001, 0.003]
+    minutes_per_domain: 6.5
+  - model: base
+    method: deyo
+    learning_rates: [0.00001, 0.00003, 0.0001, 0.0003, 0.001, 0.003]
+    minutes_per_domain: 4.5
+  - model: small
+    method: eata
+    learning_rates: [0.00001, 0.00003, 0.0001, 0.0003, 0.001, 0.003]
+    minutes_per_domain: 1.5
+  - model: small
+    method: sar
+    learning_rates: [0.00001, 0.00003, 0.0001, 0.0003, 0.001, 0.003]
+    minutes_per_domain: 2.7
+  - model: small
+    method: deyo
+    learning_rates: [0.00001, 0.00003, 0.0001, 0.0003, 0.001, 0.003]
+    minutes_per_domain: 2.0
