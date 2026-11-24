@@ -1,6 +1,6 @@
 # ATA: ViTTT 上的分类 TTA 实验
 
-一个紧凑的科研代码目录，支持 ViTTT Tiny / Small / Base、干净 ImageNet / ImageNet-C 评测、Source、Tent、InfoMax，以及针对 TTT 内层 loss 的 Lambda 方法。
+一个紧凑的科研代码目录，支持 ViTTT Tiny / Small / Base、干净 ImageNet / ImageNet-C 评测，以及 Source、Tent、InfoMax、EATA、SAR、DeYO、Lambda、LambdaW0。
 
 Agent 接手先阅读 [AGENTS.md](AGENTS.md)，其中记录方法、评测约定和运行上下文，与代码一起提交到 Git。数据、权重和实验输出独立保存；换设备后安装环境、下载权重并配置数据路径，需要复现实验时另外同步对应的实验目录。
 
@@ -14,7 +14,8 @@ Agent 接手先阅读 [AGENTS.md](AGENTS.md)，其中记录方法、评测约定
 ATA/
 ├── run.py                 # 配置 -> 数据 -> 适应/评测 -> 记录/保存
 ├── data.py                # ImageNet / ImageNet-C、样本列表和预处理
-├── methods.py             # Source / Tent / InfoMax / Lambda
+├── methods.py             # 各方法的更新、参数选择和状态重置
+├── sam.py                 # SAR 官方的 SAM，两步更新
 ├── utils.py               # YAML 配置、随机种子、实验文件、checkpoint 工具
 ├── summarize.py           # 汇总不同运行到 comparison.csv
 ├── models/                # 原始模型、构建/加载入口、Lambda 内层更新
@@ -215,6 +216,67 @@ python run.py --config configs/test_50k.yaml configs/lambda.yaml \
 重置恢复源模型参数、buffer 和初始优化器状态。domain 顺序按 `data.py` 中的定义或显式 `data.domains` 列表；severity 顺序按配置。DataLoader 不丢弃最后一个 batch。
 
 继续添加方法时，在 `methods.py` 实现 `step(images)`，返回 `(logits, metrics)`，并实现 `reset/state_dict/load_state_dict`，加入 `METHODS`，再提供一个 YAML 配置即可。可以继承现有方法复用目标函数、更新、保存和重置。
+
+## LambdaW0：同时适应 loss 与快权重初值
+
+`configs/lambda_w0.yaml` 的方法名是 `lambda_w0`。外层目标仍为 InfoMax，同时更新 θ 和选中 TTT 分支的快权重初值 W0：SwiGLU 为原模型的 `w1/w2`，卷积为 `w3`。W0 从官方预训练权重开始，θ 从 0 开始；QKV、投影、MLP、全部 LN 和分类头冻结。内层更新仍使用原来的步长和归一化。
+
+两个参数组共用一个优化器，分别配置学习率：
+
+```yaml
+method:
+  name: lambda_w0
+  optimizer:
+    name: sgd
+    lr: 0.3           # theta 学习率
+  w0_lr: 0.00001      # 快权重初值学习率
+  layers: all
+  branches:
+    swiglu: true
+    conv: true
+```
+
+`layers` 和 `branches` 同时确定 Lambda 与 W0 的适应范围：关闭卷积适应时 `w3` 保持冻结；未选中的 block 保持原样。每个任务重置 θ=0、W0=源权重及两组优化器动量。以上学习率只是起点，需在 extra 域选择。
+
+```bash
+python run.py --config configs/val_50k.yaml configs/lambda_w0.yaml \
+  --set model.name=small model.checkpoint=weights/pretrained/vittt_small.pth \
+  method.optimizer.lr=0.3 method.w0_lr=0.00001 run.name=lambda_w0_small
+```
+
+## EATA、SAR、DeYO
+
+三个方法按作者官方代码移植，固定提交、文件哈希、接口调整和许可证见 [THIRD_PARTY.md](THIRD_PARTY.md)。生产代码只保留必要的更新和依赖，官方 checkout 独立存放。
+
+| 方法 | ViTTT 上的更新参数 | S 标量数 | B 标量数 |
+|---|---|---:|---:|
+| EATA | 全部 block 的 LN 和最终 LN | 19,200 | 38,400 |
+| SAR / DeYO | blocks.0～8 的 norm1/norm2；冻结 blocks.9～11 和最终 norm | 13,824 | 27,648 |
+
+所有方法统一 `eval()`，适应时开启梯度；当前模型 Dropout=0、DropPath=Identity，LN 的 train/eval 计算相同。所有 block 仍完整前向。数据预处理、batch 64、先计分后更新、每任务重置和默认不保存 checkpoint 的设置沿用原协议。
+
+**EATA** 的更新顺序：整批前向 → `H < 0.4*ln(C)` 熵筛选 → 与历史概率向量的绝对余弦相似度 `< 0.05` 的非冗余筛选 → 更新概率 EMA（0.9）→ 加权熵加 Fisher 正则 → SGD。loss 为 `mean(H * exp(E0-stopgrad(H))) + 2000*sum(F*(phi-phi0)^2)`，权重不再归一化。最终没有样本时跳过更新，Fisher 正则也不单独触发更新。
+
+EATA 初始化从 `method.eata.fisher_root` 的干净 ImageNet 随机选 2000 张，使用模型 argmax 伪标签的交叉熵。按官方累加每个 batch 的 LN 梯度平方，再除以 batch 数，不执行权重更新。Fisher batch 默认 64；预处理为 `Resize(256,bilinear) → CenterCrop(224) → ToTensor → Normalize`。`run.seed` 控制清单和实际 batch 顺序，保存到 `fisher_samples.json`。每个实验只计算一次，在内存中供各 corruption 复用。
+
+**SAR** 的更新顺序：第一次前向和熵筛选（`0.4*ln(C)`）→ 第一次反传 → SAM 扰动 → 第二次完整前向 → 在首轮入选样本中再次熵筛选 → 第二次反传 → 恢复扰动前参数并做 SGD 更新。SAM `rho=0.05`、`adaptive=false`，基础 SGD momentum=0.9。第二次筛选后熵的 EMA 系数为 0.9，低于 0.2 时触发恢复。返回第一次前向预测。
+
+SAR 保留官方内部恢复行为：复位源参数和 SAM 自身状态，保留基础 SGD 动量及本次 EMA；外部任务重置则完整清空动量和 EMA。官方空筛选路径仍执行零梯度和已有动量的更新，日志中的未定义 loss 记为 null。对应行为已与官方代码核对。
+
+**DeYO** 的更新顺序：整批前向 → 熵 `< 0.5*ln(C)` 筛选 → 对入选图像做结构扰动并无梯度前向 → `PLPD > 0.2` 筛选 → 原图熵加权 → SGD。PLPD 为原图预测类别在原图、扰动图上的概率之差；权重为 `exp(0.4*ln(C)-stopgrad(H)) + exp(stopgrad(PLPD))`。两项相加，只反传原图熵；空筛选跳过更新。
+
+DeYO 默认 `patch` 扰动，`patch_len=4` 是每行/列四块，共 16 块。保留官方独立逐图 CPU 随机排列、einops 重排和 Resize；也支持 `pixel` 和 `occ`。遮挡默认大小 112，起点行/列均为 56，用图像通道均值填充。熵/PLPD 筛选和两项加权默认全部开启。
+
+```bash
+python run.py --config configs/val_50k.yaml configs/eata.yaml \
+  --set model.name=base model.checkpoint=weights/pretrained/vittt_base.pth \
+  method.optimizer.lr=0.001 run.name=eata_base
+# SAR / DeYO 分别替换为 configs/sar.yaml / configs/deyo.yaml。
+```
+
+除学习率外，默认沿用官方参数；学习率用 extra 4 域的多个 seed 均值选择，再固定到 standard 15 域。逐 batch 记录筛选数量、loss、前向/反向次数与实际更新数，SAR 另记熵 EMA 和恢复次数，DeYO 另记 PLPD 均值。筛选/调用计数也汇总到域结果和 summary。
+
+EATA / SAR 的扩展 checkpoint 保存恢复和旧 checkpoint 兼容留待后续；当前使用默认 `run.save_weights=none`，显式调用这两种方法的 checkpoint 保存会提示尚未实现。
 
 ## 实验记录与保存权重
 

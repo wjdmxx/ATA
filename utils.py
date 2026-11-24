@@ -145,6 +145,7 @@ def snapshot_code(directory):
     files = list(ROOT.glob("*.py")) + list((ROOT / "models").glob("*.py"))
     files += list((ROOT / "configs").glob("*.yaml"))
     files += [ROOT / "models/UPSTREAM.json", ROOT / "requirements.txt"]
+    files += [ROOT / "THIRD_PARTY.md"]
 
     hashes = {}
     for path in files:
@@ -206,7 +207,7 @@ def resume_config(config):
     """Execution location and logging may change; scientific settings may not."""
     result = deepcopy(config)
 
-    if result["method"]["name"] != "lambda":
+    if result["method"]["name"] not in ("lambda", "lambda_w0"):
         for key in ("lambda_max", "branches", "layers"):
             result["method"].pop(key, None)
 

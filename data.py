@@ -1,10 +1,13 @@
 """ImageNet / ImageNet-C: fixed sample identities and order across methods."""
 import hashlib
 import json
+import os
 from pathlib import Path
+import random
 
 import numpy as np
-from torch.utils.data import Dataset
+import torch
+from torch.utils.data import DataLoader, Dataset
 from torchvision import datasets, transforms
 from torchvision.datasets.folder import default_loader
 from torchvision.transforms import InterpolationMode
@@ -197,3 +200,31 @@ class ImageNetImages(Dataset):
         image = default_loader(self.folder / item["path"])
 
         return self.transform(image), item["label"]
+
+
+def build_fisher_loader(data_config, options, seed):
+    """Official EATA: random clean images, followed by a shuffled batch order."""
+    folder = Path(os.path.expandvars(options["fisher_root"])).expanduser()
+    if not folder.is_absolute():
+        folder = Path(__file__).resolve().parent / folder
+    source = datasets.ImageFolder(folder)
+    size = options["fisher_size"]
+    if not 0 < size <= len(source):
+        raise ValueError(f"Fisher sample budget {size} exceeds clean dataset size {len(source)}")
+
+    indices = list(range(len(source)))
+    random.Random(seed).shuffle(indices)
+    indices = indices[:size]
+    generator = torch.Generator().manual_seed(seed)
+    order = torch.randperm(size, generator=generator).tolist()
+    samples = [{"path": Path(source.samples[indices[i]][0]).relative_to(folder).as_posix(),
+                "label": source.samples[indices[i]][1]} for i in order]
+    manifest = {"classes": source.classes, "samples": samples,
+                "selection": {"seed": seed, "samples": size, "sampling": "random", "shuffle": True}}
+    manifest["sha256"] = manifest_digest(manifest)
+
+    transform_config = dict(data_config, resize=256, center_crop=224, interpolation="bilinear")
+    dataset = ImageNetImages(folder, manifest, build_transform(transform_config))
+    loader = DataLoader(dataset, batch_size=options["fisher_batch_size"], shuffle=False,
+                        num_workers=data_config["workers"], generator=generator)
+    return loader, manifest

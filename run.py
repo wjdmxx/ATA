@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-from data import ImageNetImages, build_transform, get_tasks, make_manifest, task_folder
+from data import ImageNetImages, build_fisher_loader, build_transform, get_tasks, make_manifest, task_folder
 from methods import build_method
 from models import build_model, download_weights, load_weights
 from utils import (
@@ -17,6 +17,8 @@ from utils import (
     make_logger, make_run_dir, restore_rng, resume_config,
     seed_everything, sha256_file, snapshot_code, write_json,
 )
+
+ADAPTATION_COUNTS = ("n_reliable", "n_selected", "forward_calls", "backward_calls", "recoveries")
 
 
 def should_reset(mode, index, tasks):
@@ -57,6 +59,7 @@ def summarize(rows):
         "task_seconds": sum(row["seconds"] for row in rows),
         "peak_memory_mib": max(row["peak_memory_mib"] for row in rows),
         "by_domain": {name: float(np.mean(values)) for name, values in by_domain.items()},
+        **{key: sum(row.get(key, 0) for row in rows) for key in ADAPTATION_COUNTS if key in rows[0]},
     }
 
 
@@ -126,6 +129,7 @@ def evaluate_task(method, loader, device, config, directory, task, task_index, l
     started = time.perf_counter()
     count = correct1 = correct5 = updates = 0
     model_seconds = 0.0
+    adaptation_counts = {}
 
     with (directory / "metrics.jsonl").open("a") as metrics_file:
         for batch_index, (images, labels) in enumerate(loader):
@@ -151,6 +155,9 @@ def evaluate_task(method, loader, device, config, directory, task, task_index, l
             correct1 += batch_correct1
             correct5 += batch_correct5
             updates += adaptation_metrics.get("updates", 0)
+            for key in ADAPTATION_COUNTS:
+                if key in adaptation_metrics:
+                    adaptation_counts[key] = adaptation_counts.get(key, 0) + adaptation_metrics[key]
             model_seconds += elapsed
 
             record = {
@@ -191,6 +198,7 @@ def evaluate_task(method, loader, device, config, directory, task, task_index, l
         "seconds": time.perf_counter() - started,
         "model_seconds": model_seconds,
         "peak_memory_mib": peak_memory,
+        **adaptation_counts,
     }
 
 
@@ -262,6 +270,18 @@ def run(config, resume=None):
 
     started = time.perf_counter()
     try:
+        if config["method"]["name"] == "eata":
+            fisher_started = time.perf_counter()
+            fisher_loader, fisher_manifest = build_fisher_loader(data_config, config["method"]["eata"], seed)
+            write_json(directory / "fisher_samples.json", fisher_manifest)
+            method.estimate_fisher(fisher_loader)
+            metadata["fisher"] = {"samples": len(fisher_loader.dataset), "batches": len(fisher_loader),
+                                  "sample_sha256": fisher_manifest["sha256"],
+                                  "seconds": time.perf_counter() - fisher_started}
+            write_json(directory / "metadata.json", metadata)
+            logger.info("Fisher: %d clean images, %d batches, %.2f seconds",
+                        metadata["fisher"]["samples"], metadata["fisher"]["batches"], metadata["fisher"]["seconds"])
+
         transform = build_transform(data_config)
         for index in range(first_task, len(tasks)):
             task = tasks[index]

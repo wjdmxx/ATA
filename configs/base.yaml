@@ -26,8 +26,8 @@ data:
   std: [0.229, 0.224, 0.225]
 
 method:
-  name: source                  # source | tent | infomax | lambda
-  parameters: norm              # Tent/InfoMax: norm | all; Lambda always updates theta only
+  name: source                  # source | tent | infomax | lambda | lambda_w0 | eata | sar | deyo
+  parameters: norm              # Tent/InfoMax: norm | all; Lambda variants have their own scopes
   steps: 1
   prediction: before_update     # final inner forward, before final optimizer step
   diversity_weight: 1.0         # InfoMax: H(Y|X) - weight * H(Y)
@@ -36,6 +36,36 @@ method:
     swiglu: true
     conv: true
   layers: all                  # Lambda: all actual blocks, or zero-based indices, e.g. [0, 1, 11]
+  w0_lr: 0.00001               # lambda_w0 only; optimizer.lr controls theta
+  eata:
+    e_margin: 0.4              # coefficient of ln(number of classes)
+    d_margin: 0.05
+    fisher_alpha: 2000.0
+    fisher_size: 2000
+    fisher_root: /mnt/bit/data/imagenet/images/val
+    fisher_batch_size: 64
+  sar:
+    margin_e0: 0.4             # coefficient of ln(number of classes)
+    rho: 0.05
+    adaptive: false
+    reset_constant_em: 0.2
+    exclude_blocks: [9, 10, 11]
+    exclude_final_norm: true
+  deyo:
+    deyo_margin: 0.5           # coefficient of ln(number of classes)
+    deyo_margin_e0: 0.4        # coefficient of ln(number of classes)
+    plpd_threshold: 0.2        # official ViT setting
+    aug_type: patch            # patch | pixel | occ
+    patch_len: 4               # 4x4 patches, NOT 4-pixel patches
+    occlusion_size: 112
+    row_start: 56
+    column_start: 56
+    filter_ent: true
+    filter_plpd: true
+    reweight_ent: true
+    reweight_plpd: true
+    exclude_blocks: [9, 10, 11]
+    exclude_final_norm: true
   optimizer:
     name: sgd
     lr: 0.001                   # starting value, NOT a tuned/reproduced result

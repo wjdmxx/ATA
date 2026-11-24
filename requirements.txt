@@ -6,3 +6,4 @@ numpy==1.23.5
 Pillow==12.3.0
 PyYAML==6.0.4
 yacs==0.1.8
+einops==0.8.2

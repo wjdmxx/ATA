@@ -1,0 +1,5 @@
+method:
+  name: eata
+  parameters: norm
+run:
+  name: eata_tiny

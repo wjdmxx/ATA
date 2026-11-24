@@ -1,0 +1,8 @@
+method:
+  name: lambda_w0
+  parameters: theta_w0
+  optimizer:
+    lr: 0.3                    # theta learning rate; starting point, select on extra domains
+  w0_lr: 0.00001               # w1/w2/w3 learning rate, independent of theta
+run:
+  name: lambda_w0_tiny

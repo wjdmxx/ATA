@@ -1,0 +1,5 @@
+method:
+  name: sar
+  parameters: norm
+run:
+  name: sar_tiny
