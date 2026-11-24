@@ -55,7 +55,7 @@ OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 python -B -m unittest discover -s tests -v
 
 批量实验入口为 `sweep.py --config configs/sweep_50k.yaml`，当前网格是 B 的 Tent / InfoMax / Lambda 和 S 的 Lambda，各 3 个学习率、seed 0/1/2、test/val 两组，共 72 次。队列按预计耗时均衡分配到 GPU 2–7；各卡按 seed 顺序独立执行，完成当前任务就开始下一项，不设跨卡 seed 分界。每项通过 holder 的 exec 自动释放和恢复显卡；失败记录后继续剩余任务。队列目录保存 `status.json`、每项启动日志及 `runs/` 下的完整实验目录。
 
-`configs/sweep_baselines_val_50k.yaml` 是 EATA / SAR / DeYO 的首轮学习率搜索：S/B、extra 4 域每域 50K、batch 64、seed 0，学习率 [1e-5, 3e-5, 1e-4, 3e-4, 1e-3, 3e-3]，共 36 次，配置使用 GPU 4–7。其他方法超参数保持官方默认，SAR 使用 SAM+SGD；EATA 的 Fisher 默认 clean 2000 张。沿用同一个 sweep.py 排队。
+`configs/sweep_baselines_val_50k.yaml` 是 EATA / SAR / DeYO 的首轮学习率搜索：S/B、extra 4 域每域 50K、severity 5、batch 64、seed 0，学习率 [1e-5, 3e-5, 1e-4, 3e-4, 1e-3, 3e-3]，共 36 次，配置使用 GPU 0–7。其他方法超参数保持官方默认，SAR 使用 SAM+SGD；EATA 的 Fisher 默认 clean 2000 张。沿用同一个 sweep.py 排队。GPU 无需 holder 释放时加 `--no-holder` 直接执行，不检测 holder 脚本或状态目录，也不恢复占用；`status.json` 的 `use_holder` 记录运行方式。
 
 每次实验写入 `outputs/<时间_名字_唯一标识>/`：最终配置、环境和参数信息、样本清单、代码快照、逐 batch 指标、逐域结果、汇总和日志。`run.save_weights: none` 为默认值，不保存 checkpoint；显式开启后保存模型、θ、优化器和恢复状态。
 
@@ -69,7 +69,7 @@ OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 python -B -m unittest discover -s tests -v
 
 临时 H20 机器项目位于 `/data1/buaa/liyuanxi/projects/ATA`，环境 Python 为 `/data1/conda_envs/liyuanxi/vittt/bin/python`，ImageNet-C 位于 `/data1/buaa/datasets/imagenet-c`，clean 验证集位于 `/data1/buaa/datasets/imagenet/val`。`utils.resolve_machine_path` 优先使用配置中的 4090 路径，不存在时回退到 H20 路径，覆盖评测数据和 EATA Fisher；自定义路径不回退，实际执行时找不到路径则报错。两台机器切换无需改 YAML。权重统一使用项目相对路径 `weights/pretrained/vittt_{tiny,small,base}.pth`；H20 上已从相邻 ViTTT 项目复制三个权重。
 
-GPU 占用工具优先使用相邻的 `../g/g.py`，不存在时回退到 `../gpu-holder/gpu_hold.py`。跑 GPU 实验时使用它的 `exec --gpus ... -- <实验命令>`，自动完成释放、实验、重新占用；实验的 `run.device` 要对应所选 GPU。`sweep.py` 自动检测脚本和状态目录；状态目录优先 `/run/user/$(id -u)/gpu-holder`，不存在时回退 `/tmp/gpu-holder-$(id -u)`，显式 `GPU_HOLDER_STATE_DIR` 优先。多实例时用当前 PID 指定 `--controller-pid`。
+GPU 占用工具优先使用相邻的 `../g/g.py`，不存在时回退到 `../gpu-holder/gpu_hold.py`。默认跑 GPU 实验时使用它的 `exec --gpus ... -- <实验命令>`，自动完成释放、实验、重新占用；用户要求直接使用空闲 GPU 时可用 `sweep.py --no-holder` 跳过 holder。实验的 `run.device` 要对应所选 GPU。`sweep.py` 默认自动检测脚本和状态目录；状态目录优先 `/run/user/$(id -u)/gpu-holder`，不存在时回退 `/tmp/gpu-holder-$(id -u)`，显式 `GPU_HOLDER_STATE_DIR` 优先。多实例时用当前 PID 指定 `--controller-pid`。
 
 长实验放在 `tmux` 的 `ata` session 中，启动后通过日志查看进度。当前机器的 GPU、holder PID 和 tmux 状态在运行前查询。
 

@@ -60,6 +60,7 @@ def main():
     parser.add_argument("--output")
     parser.add_argument("--holder", default=str(ROOT.parent / "g/g.py"))
     parser.add_argument("--controller-pid", type=int)
+    parser.add_argument("--no-holder", action="store_true", help="Run experiments directly without GPU holder")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -76,7 +77,8 @@ def main():
     if args.dry_run:
         return 0
 
-    args.holder = str(resolve_machine_path(args.holder, required=True))
+    if not args.no_holder:
+        args.holder = str(resolve_machine_path(args.holder, required=True))
 
     # Check only requested task folders and weights before releasing GPUs.
     for job in jobs:
@@ -96,7 +98,8 @@ def main():
 
     def save_status():
         temporary = output / "status.tmp"
-        temporary.write_text(json.dumps({"git_commit": revision, "jobs": jobs}, indent=2) + "\n")
+        temporary.write_text(json.dumps({"git_commit": revision, "use_holder": not args.no_holder,
+                                         "jobs": jobs}, indent=2) + "\n")
         temporary.replace(output / "status.json")
 
     def message(text):
@@ -112,7 +115,7 @@ def main():
         signal.signal(signum, request_stop)
 
     environment = dict(os.environ, OMP_NUM_THREADS="4", MKL_NUM_THREADS="4")
-    if "GPU_HOLDER_STATE_DIR" not in environment:
+    if not args.no_holder and "GPU_HOLDER_STATE_DIR" not in environment:
         environment["GPU_HOLDER_STATE_DIR"] = str(resolve_machine_path(
             f"/run/user/{os.getuid()}/gpu-holder", required=True))
     save_status()
@@ -126,10 +129,12 @@ def main():
                 save_status()
                 message(f"START GPU {gpu}: {job['name']}")
 
-            command = [sys.executable, "-B", "-u", args.holder, "exec", "--gpus", str(gpu)]
-            if args.controller_pid is not None:
-                command += ["--controller-pid", str(args.controller_pid)]
-            command += ["--", *job["command"]]
+            command = job["command"]
+            if not args.no_holder:
+                command = [sys.executable, "-B", "-u", args.holder, "exec", "--gpus", str(gpu)]
+                if args.controller_pid is not None:
+                    command += ["--controller-pid", str(args.controller_pid)]
+                command += ["--", *job["command"]]
             with (output / "logs" / f"{job['name']}.log").open("w") as log:
                 log.write(shlex.join(command) + "\n")
                 log.flush()

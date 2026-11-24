@@ -1,5 +1,5 @@
 # S/B × EATA/SAR/DeYO × 6 learning rates × seed 0 = 36 validation runs.
-gpus: [4, 5, 6, 7]
+gpus: [0, 1, 2, 3, 4, 5, 6, 7]
 seeds: [0]
 data_configs:
   val: configs/val_50k.yaml

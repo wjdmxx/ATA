@@ -174,9 +174,15 @@ python run.py --config configs/test_5k.yaml configs/infomax.yaml \
 ```bash
 python sweep.py --dry-run
 python -u sweep.py --output outputs/sweep_50k --controller-pid <当前holder的PID>
+
+# GPU 无需 holder 释放时直接运行；S/B × EATA/SAR/DeYO × 6 个学习率 × seed 0。
+# 使用 GPU 0–7，extra 4 域各 50K，severity 5、batch 64。
+python -u sweep.py --config configs/sweep_baselines_val_50k.yaml --no-holder
 ```
 
 在 tmux 中启动队列即可离开。队列目录的 `status.json` 记录每项任务的命令、GPU、状态、退出码和结果路径，`logs/` 保留启动日志，`runs/` 下每次实验仍使用独立目录。可以随时执行 `python summarize.py outputs/sweep_50k/runs` 汇总当前结果；六条队列各自结束时也会刷新汇总。Ctrl-C / SIGTERM 会停止排队并交给 holder 恢复占用。
+
+`--no-holder` 会跳过 holder 脚本和状态目录检测，直接启动各实验，也不会恢复 GPU 占用。队列的 `status.json` 用 `use_holder` 记录运行方式；单项失败后继续其余任务。其他模型、方法、数据和重置协议保持相同。
 
 ## 方法和状态协议
 
