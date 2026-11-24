@@ -2,7 +2,7 @@
 
 一个紧凑的科研代码目录，支持 ViTTT Tiny / Small / Base、干净 ImageNet / ImageNet-C 评测，以及 Source、Tent、InfoMax、EATA、SAR、DeYO、Lambda、LambdaW0。
 
-Agent 接手先阅读 [AGENTS.md](AGENTS.md)，其中记录方法、评测约定和运行上下文，与代码一起提交到 Git。数据、权重和实验输出独立保存；换设备后安装环境、下载权重并配置数据路径，需要复现实验时另外同步对应的实验目录。
+Agent 接手先阅读 [AGENTS.md](AGENTS.md)，其中记录方法、评测约定和运行上下文，与代码一起提交到 Git。数据、权重和实验输出独立保存；4090 与临时 H20 机器共用现有配置，路径自动检测，需要复现实验时另外同步对应的实验目录。
 
 ## 模型保持原样
 
@@ -50,6 +50,21 @@ python run.py --download small base
 ```
 
 Tiny 的默认路径是 `weights/pretrained/vittt_tiny.pth`。也支持在配置中指定自己的权重。支持原始 state_dict，以及 `model`、`state_dict`、`state_dict_ema` 等外层 key；通过 `model.checkpoint_key` 明确选择，加载采用 `strict=True`。官方训练文件包含 pickled 配置，因此仅加载可信的官方权重或自己的 checkpoint。
+
+### 两台机器的路径兼容
+
+配置文件保留 4090 机器的路径。代码优先使用配置路径，仅在它不存在时尝试临时 H20 机器的位置，两处均不存在时在执行阶段报错；`--dry-run` 仍可查看不可用路径。自动回退仅适用于下表中的已知默认路径，自定义路径保持原样。
+
+| 用途 | 4090 路径（优先） | 临时 H20 路径（回退） |
+|---|---|---|
+| ImageNet-C | `/mnt/bit/data/imagenet-c` | `/data1/buaa/datasets/imagenet-c` |
+| clean ImageNet / EATA Fisher | `/mnt/bit/data/imagenet/images/val` | `/data1/buaa/datasets/imagenet/val` |
+| holder Python 脚本 | 相邻目录 `../g/g.py` | 相邻目录 `../gpu-holder/gpu_hold.py` |
+| holder 状态目录 | `/run/user/<uid>/gpu-holder` | `/tmp/gpu-holder-<uid>` |
+
+`GPU_HOLDER_STATE_DIR` 若已设置则优先使用。`sweep.py` 仍需已有 holder 进程；tmux 只用于保持长任务运行。实验保存的 `config.yaml` 记录检测后的实际数据路径。
+
+三个权重统一存放在项目相对目录 `weights/pretrained/`，文件名为 `vittt_tiny.pth`、`vittt_small.pth`、`vittt_base.pth`，不做机器路径回退。临时 H20 机器已从相邻 ViTTT 项目的 `checkpoints/ViTTT-{T,S,B}.pth` 复制到这些位置。
 
 ## 干净 ImageNet 验证集
 

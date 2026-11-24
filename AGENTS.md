@@ -11,7 +11,7 @@
 - `methods.py`：Source、Tent、InfoMax、Lambda、LambdaW0、EATA、SAR、DeYO；`sam.py` 为 SAR 官方两步优化器。
 - `models/vittt.py`、`models/ttt_block.py`：官方原文件，SHA256 记录在 `models/UPSTREAM.json`。保持原始架构和计算规则。
 - `models/lambda_ttt.py`：Lambda 专用内层导数，复用源模型权重并继承原始 forward。
-- `utils.py`：配置、随机数、运行目录、代码快照、状态保存。
+- `utils.py`：配置、两台机器的路径回退、随机数、运行目录、代码快照、状态保存。
 - `configs/`：数据和方法 YAML；`summarize.py` 汇总实验。
 
 ## 方法约定
@@ -65,9 +65,11 @@ OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 python -B -m unittest discover -s tests -v
 
 ## 当前机器
 
-项目位于 `/mnt/bit/users/liyuanxi/projects/ATA`，环境 Python 为 `/mnt/bit/users/liyuanxi/miniconda3/envs/vittt/bin/python`。ImageNet-C 位于 `/mnt/bit/data/imagenet-c`，clean 验证集位于 `/mnt/bit/data/imagenet/images/val`。换设备后通过 YAML 或 `--set` 更新路径，机器专用配置可放在忽略的 `configs/local.yaml`。
+4090 机器项目位于 `/mnt/bit/users/liyuanxi/projects/ATA`，环境 Python 为 `/mnt/bit/users/liyuanxi/miniconda3/envs/vittt/bin/python`。ImageNet-C 位于 `/mnt/bit/data/imagenet-c`，clean 验证集位于 `/mnt/bit/data/imagenet/images/val`。
 
-GPU 占用工具在相邻的 `../g/g.py`。跑 GPU 实验时使用它的 `exec --gpus ... -- <实验命令>`，自动完成释放、实验、重新占用；实验的 `run.device` 要对应所选 GPU。holder 状态在 `/run/user/$(id -u)/gpu-holder/holders/`，多实例时用当前 PID 指定 `--controller-pid`。本机可设置 `GPU_HOLDER_STATE_DIR=/run/user/$(id -u)/gpu-holder`。
+临时 H20 机器项目位于 `/data1/buaa/liyuanxi/projects/ATA`，环境 Python 为 `/data1/conda_envs/liyuanxi/vittt/bin/python`，ImageNet-C 位于 `/data1/buaa/datasets/imagenet-c`，clean 验证集位于 `/data1/buaa/datasets/imagenet/val`。`utils.resolve_machine_path` 优先使用配置中的 4090 路径，不存在时回退到 H20 路径，覆盖评测数据和 EATA Fisher；自定义路径不回退，实际执行时找不到路径则报错。两台机器切换无需改 YAML。权重统一使用项目相对路径 `weights/pretrained/vittt_{tiny,small,base}.pth`；H20 上已从相邻 ViTTT 项目复制三个权重。
+
+GPU 占用工具优先使用相邻的 `../g/g.py`，不存在时回退到 `../gpu-holder/gpu_hold.py`。跑 GPU 实验时使用它的 `exec --gpus ... -- <实验命令>`，自动完成释放、实验、重新占用；实验的 `run.device` 要对应所选 GPU。`sweep.py` 自动检测脚本和状态目录；状态目录优先 `/run/user/$(id -u)/gpu-holder`，不存在时回退 `/tmp/gpu-holder-$(id -u)`，显式 `GPU_HOLDER_STATE_DIR` 优先。多实例时用当前 PID 指定 `--controller-pid`。
 
 长实验放在 `tmux` 的 `ata` session 中，启动后通过日志查看进度。当前机器的 GPU、holder PID 和 tmux 状态在运行前查询。
 

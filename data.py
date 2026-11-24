@@ -1,7 +1,6 @@
 """ImageNet / ImageNet-C: fixed sample identities and order across methods."""
 import hashlib
 import json
-import os
 from pathlib import Path
 import random
 
@@ -11,6 +10,8 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision import datasets, transforms
 from torchvision.datasets.folder import default_loader
 from torchvision.transforms import InterpolationMode
+
+from utils import resolve_machine_path
 
 STANDARD = (
     "gaussian_noise", "shot_noise", "impulse_noise", "defocus_blur",
@@ -204,9 +205,7 @@ class ImageNetImages(Dataset):
 
 def build_fisher_loader(data_config, options, seed):
     """Official EATA: random clean images, followed by a shuffled batch order."""
-    folder = Path(os.path.expandvars(options["fisher_root"])).expanduser()
-    if not folder.is_absolute():
-        folder = Path(__file__).resolve().parent / folder
+    folder = resolve_machine_path(options["fisher_root"], required=True)
     source = datasets.ImageFolder(folder)
     size = options["fisher_size"]
     if not 0 < size <= len(source):

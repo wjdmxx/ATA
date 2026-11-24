@@ -18,6 +18,28 @@ import torch
 import yaml
 
 ROOT = Path(__file__).resolve().parent
+MACHINE_PATHS = {
+    Path("/mnt/bit/data/imagenet-c"): Path("/data1/buaa/datasets/imagenet-c"),
+    Path("/mnt/bit/data/imagenet/images/val"): Path("/data1/buaa/datasets/imagenet/val"),
+    ROOT.parent / "g/g.py": ROOT.parent / "gpu-holder/gpu_hold.py",
+    Path(f"/run/user/{os.getuid()}/gpu-holder"): Path(f"/tmp/gpu-holder-{os.getuid()}"),
+}
+
+
+def resolve_machine_path(path, *, required=False):
+    """Prefer configured paths; use the other machine only for known defaults."""
+    path = Path(os.path.expandvars(str(path))).expanduser()
+    if not path.is_absolute():
+        path = ROOT / path
+    candidates = [path]
+    if path in MACHINE_PATHS:
+        candidates.append(MACHINE_PATHS[path])
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    if required:
+        raise FileNotFoundError("Missing path; tried: " + ", ".join(map(str, candidates)))
+    return path
 
 
 def merge_config(base, update, prefix=""):
@@ -51,6 +73,9 @@ def load_config(paths=(), overrides=()):
             config[section][key] = str(path if path.is_absolute() else ROOT / path)
 
     validate_config(config)
+    config["data"]["root"] = str(resolve_machine_path(config["data"]["root"]))
+    eata = config["method"]["eata"]
+    eata["fisher_root"] = str(resolve_machine_path(eata["fisher_root"]))
     return config
 
 

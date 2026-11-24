@@ -15,7 +15,7 @@ from models import build_model, download_weights, load_weights
 from utils import (
     ROOT, atomic_save, capture_rng, environment_info, load_config,
     make_logger, make_run_dir, restore_rng, resume_config,
-    seed_everything, sha256_file, snapshot_code, write_json,
+    resolve_machine_path, seed_everything, sha256_file, snapshot_code, write_json,
 )
 
 ADAPTATION_COUNTS = ("n_reliable", "n_selected", "forward_calls", "backward_calls", "recoveries")
@@ -204,6 +204,7 @@ def evaluate_task(method, loader, device, config, directory, task, task_index, l
 
 def run(config, resume=None):
     data_config = config["data"]
+    data_config["root"] = str(resolve_machine_path(data_config["root"], required=True))
     run_config = config["run"]
     device = torch.device(run_config["device"])
     if device.type == "cuda":

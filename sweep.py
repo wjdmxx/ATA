@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 import yaml
 
 from data import get_tasks, task_folder
-from utils import ROOT, load_config
+from utils import ROOT, load_config, resolve_machine_path
 
 
 def make_plan(settings, output):
@@ -76,6 +76,8 @@ def main():
     if args.dry_run:
         return 0
 
+    args.holder = str(resolve_machine_path(args.holder, required=True))
+
     # Check only requested task folders and weights before releasing GPUs.
     for job in jobs:
         config = load_config(job["configs"], job["overrides"])
@@ -110,7 +112,9 @@ def main():
         signal.signal(signum, request_stop)
 
     environment = dict(os.environ, OMP_NUM_THREADS="4", MKL_NUM_THREADS="4")
-    environment.setdefault("GPU_HOLDER_STATE_DIR", f"/run/user/{os.getuid()}/gpu-holder")
+    if "GPU_HOLDER_STATE_DIR" not in environment:
+        environment["GPU_HOLDER_STATE_DIR"] = str(resolve_machine_path(
+            f"/run/user/{os.getuid()}/gpu-holder", required=True))
     save_status()
 
     def run_gpu(gpu):
