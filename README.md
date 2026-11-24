@@ -176,7 +176,7 @@ python sweep.py --dry-run
 python -u sweep.py --output outputs/sweep_50k --controller-pid <当前holder的PID>
 
 # GPU 无需 holder 释放时直接运行；S/B × EATA/SAR/DeYO × 6 个学习率 × seed 0。
-# 使用 GPU 0–7，extra 4 域各 50K，severity 5、batch 64。
+# 使用 GPU 0、1、3–7（GPU 2 被其他任务占用），extra 4 域各 50K，severity 5、batch 64。
 python -u sweep.py --config configs/sweep_baselines_val_50k.yaml --no-holder
 ```
 

@@ -55,7 +55,7 @@ OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 python -B -m unittest discover -s tests -v
 
 批量实验入口为 `sweep.py --config configs/sweep_50k.yaml`，当前网格是 B 的 Tent / InfoMax / Lambda 和 S 的 Lambda，各 3 个学习率、seed 0/1/2、test/val 两组，共 72 次。队列按预计耗时均衡分配到 GPU 2–7；各卡按 seed 顺序独立执行，完成当前任务就开始下一项，不设跨卡 seed 分界。每项通过 holder 的 exec 自动释放和恢复显卡；失败记录后继续剩余任务。队列目录保存 `status.json`、每项启动日志及 `runs/` 下的完整实验目录。
 
-`configs/sweep_baselines_val_50k.yaml` 是 EATA / SAR / DeYO 的首轮学习率搜索：S/B、extra 4 域每域 50K、severity 5、batch 64、seed 0，学习率 [1e-5, 3e-5, 1e-4, 3e-4, 1e-3, 3e-3]，共 36 次，配置使用 GPU 0–7。其他方法超参数保持官方默认，SAR 使用 SAM+SGD；EATA 的 Fisher 默认 clean 2000 张。沿用同一个 sweep.py 排队。GPU 无需 holder 释放时加 `--no-holder` 直接执行，不检测 holder 脚本或状态目录，也不恢复占用；`status.json` 的 `use_holder` 记录运行方式。
+`configs/sweep_baselines_val_50k.yaml` 是 EATA / SAR / DeYO 的首轮学习率搜索：S/B、extra 4 域每域 50K、severity 5、batch 64、seed 0，学习率 [1e-5, 3e-5, 1e-4, 3e-4, 1e-3, 3e-3]，共 36 次。临时 H20 上 GPU 2 被其他任务占用，当前配置使用 GPU 0、1、3–7，共七张卡。其他方法超参数保持官方默认，SAR 使用 SAM+SGD；EATA 的 Fisher 默认 clean 2000 张。沿用同一个 sweep.py 排队。GPU 无需 holder 释放时加 `--no-holder` 直接执行，不检测 holder 脚本或状态目录，也不恢复占用；`status.json` 的 `use_holder` 记录运行方式。
 
 每次实验写入 `outputs/<时间_名字_唯一标识>/`：最终配置、环境和参数信息、样本清单、代码快照、逐 batch 指标、逐域结果、汇总和日志。`run.save_weights: none` 为默认值，不保存 checkpoint；显式开启后保存模型、θ、优化器和恢复状态。
 

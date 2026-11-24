@@ -19,14 +19,14 @@ from utils import load_config
 
 
 class SweepTests(unittest.TestCase):
-    def test_baseline_grid_has_36_validation_runs_on_eight_gpus(self):
+    def test_baseline_grid_has_36_validation_runs_without_gpu_two(self):
         settings = yaml.safe_load((ROOT / "configs/sweep_baselines_val_50k.yaml").read_text())
         jobs = sweep.make_plan(settings, Path("/tmp/ata-test-plan"))
         rates = [1e-5, 3e-5, 1e-4, 3e-4, 1e-3, 3e-3]
         expected = set(itertools.product(("small", "base"), ("eata", "sar", "deyo"), rates, (0,)))
         self.assertEqual(len(jobs), 36)
         self.assertEqual({(j["model"], j["method"], j["lr"], j["seed"]) for j in jobs}, expected)
-        self.assertEqual({job["gpu"] for job in jobs}, set(range(8)))
+        self.assertEqual({job["gpu"] for job in jobs}, {0, 1, 3, 4, 5, 6, 7})
         for job in jobs:
             config = load_config(job["configs"], job["overrides"])
             self.assertEqual(get_tasks(config["data"]), [(domain, 5) for domain in EXTRA])
