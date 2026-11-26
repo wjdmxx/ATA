@@ -1,5 +1,4 @@
 # 4 model/method combinations × 3 learning rates × 3 seeds × 2 splits = 72 runs.
-gpus: [2, 3, 4, 5, 6, 7]
 seeds: [0, 1, 2]               # Queue in seed order; each GPU advances independently.
 data_configs:
   test: configs/test_50k.yaml

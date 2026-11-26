@@ -31,7 +31,7 @@ ATA/
 
 ```bash
 conda activate vittt
-cd /mnt/bit/users/liyuanxi/projects/ATA
+# 在当前机器的 ATA 项目根目录运行后续命令，目录位置见 AGENTS.md。
 ```
 
 已验证 Python 3.10、torch 2.5.1+cu124、torchvision 0.20.1+cu124、timm 0.4.12，其余版本见 `requirements.txt`。新建环境时先安装 GPU 对应的 PyTorch，再安装其余依赖，例如：
@@ -53,18 +53,18 @@ Tiny 的默认路径是 `weights/pretrained/vittt_tiny.pth`。也支持在配置
 
 ### 两台机器的路径兼容
 
-配置文件保留 4090 机器的路径。代码优先使用配置路径，仅在它不存在时尝试临时 H20 机器的位置，两处均不存在时在执行阶段报错；`--dry-run` 仍可查看不可用路径。自动回退仅适用于下表中的已知默认路径，自定义路径保持原样。
+配置文件保留 4090 机器的默认路径。代码优先使用指定路径，不存在时在两台机器的已知路径之间回退，两个方向均支持；两处均不存在时在执行阶段报错。`--dry-run` 仍可查看不可用路径，自定义路径不被替换。相对路径按项目根目录解析。
 
-| 用途 | 4090 路径（优先） | 临时 H20 路径（回退） |
+| 用途 | 4090 路径 | H20 路径 |
 |---|---|---|
 | ImageNet-C | `/mnt/bit/data/imagenet-c` | `/data1/buaa/datasets/imagenet-c` |
 | clean ImageNet / EATA Fisher | `/mnt/bit/data/imagenet/images/val` | `/data1/buaa/datasets/imagenet/val` |
 | holder Python 脚本 | 相邻目录 `../g/g.py` | 相邻目录 `../gpu-holder/gpu_hold.py` |
 | holder 状态目录 | `/run/user/<uid>/gpu-holder` | `/tmp/gpu-holder-<uid>` |
 
-`GPU_HOLDER_STATE_DIR` 若已设置则优先使用。`sweep.py` 仍需已有 holder 进程；tmux 只用于保持长任务运行。实验保存的 `config.yaml` 记录检测后的实际数据路径。
+`GPU_HOLDER_STATE_DIR` 若已设置则优先使用。`sweep.py` 默认使用已有 holder 进程，`--no-holder` 则直接运行，不检测 holder 脚本或状态目录。tmux 只用于保持长任务运行。实验保存的 `config.yaml` 记录检测后的实际数据路径。
 
-三个权重统一存放在项目相对目录 `weights/pretrained/`，文件名为 `vittt_tiny.pth`、`vittt_small.pth`、`vittt_base.pth`，不做机器路径回退。临时 H20 机器已从相邻 ViTTT 项目的 `checkpoints/ViTTT-{T,S,B}.pth` 复制到这些位置。
+三个权重统一存放在项目相对目录 `weights/pretrained/`，文件名为 `vittt_tiny.pth`、`vittt_small.pth`、`vittt_base.pth`，不做机器路径回退。换机时准备对应权重即可。
 
 ## 干净 ImageNet 验证集
 
@@ -167,22 +167,26 @@ python run.py --config configs/test_5k.yaml configs/infomax.yaml \
   --set data.manifest=outputs/<run_id>/samples.json
 ```
 
-所有方法目前用 FP32；默认超参数是可运行起点，尚未在 extra 域调优。批量扫参直接写 shell 循环即可；每个进程对应一个完整数据流，多张卡并行不同实验，例如 `CUDA_VISIBLE_DEVICES=1 python run.py ...`，进程内仍使用 `run.device=cuda:0`。
+所有方法目前用 FP32；默认超参数是可运行起点，不代表调优结果。批量扫参直接写 shell 循环即可；每个进程对应一个完整数据流，多张卡并行不同实验，例如 `CUDA_VISIBLE_DEVICES=1 python run.py ...`，进程内仍使用 `run.device=cuda:0`。
 
-`sweep.py` 提供多卡排队入口，网格保存在 `configs/sweep_50k.yaml`。当前包含 B 的 Tent / InfoMax / Lambda、S 的 Lambda，每组 3 个学习率 × 3 个 seed × test/val，共 72 次；都是每域 50K、severity 5、batch 64、SGD。六条队列按预计耗时均衡分配，各卡按 seed 0 → 1 → 2 独立执行，当前任务完成后立即进入下一项。每项经 holder 自动释放和恢复 GPU，单项失败会记录并继续后续任务。
+`sweep.py` 提供多卡排队入口。受 Git 跟踪的 YAML 描述模型、方法、数据和参数网格，GPU 在启动时通过 `--gpus` 选择：`--gpus all` 使用全部可见显卡，`--gpus 0 1 2` 使用指定显卡。编号遵循 `CUDA_VISIBLE_DEVICES`，不根据显存占用自动筛选；使用 holder 时保持相同的可见设备设置。旧运行配置中的 `gpus` 列表仍兼容，命令行选择优先。
+
+`configs/sweep_50k.yaml` 包含 B 的 Tent / InfoMax / Lambda、S 的 Lambda，每组 3 个学习率 × 3 个 seed × test/val，共 72 次；都是每域 50K、severity 5、batch 64、SGD。各卡按预计耗时均衡分配，按 seed 顺序独立执行，当前任务完成后立即进入下一项。`configs/sweep_baselines_val_50k.yaml` 是 S/B 的 EATA / SAR / DeYO 验证网格，共 36 次。
 
 ```bash
-python sweep.py --dry-run
-python -u sweep.py --output outputs/sweep_50k --controller-pid <当前holder的PID>
+python sweep.py --gpus 0 1 2 --dry-run
+python -u sweep.py --gpus 0 1 2 --output outputs/sweep_50k --controller-pid <当前holder的PID>
 
 # GPU 无需 holder 释放时直接运行；S/B × EATA/SAR/DeYO × 6 个学习率 × seed 0。
-# 使用 GPU 0、1、3–7（GPU 2 被其他任务占用），extra 4 域各 50K，severity 5、batch 64。
-python -u sweep.py --config configs/sweep_baselines_val_50k.yaml --no-holder
+# extra 4 域各 50K，severity 5、batch 64；也可把 all 换成指定卡号。
+python -u sweep.py --config configs/sweep_baselines_val_50k.yaml --gpus all --no-holder
 ```
 
-在 tmux 中启动队列即可离开。队列目录的 `status.json` 记录每项任务的命令、GPU、状态、退出码和结果路径，`logs/` 保留启动日志，`runs/` 下每次实验仍使用独立目录。可以随时执行 `python summarize.py outputs/sweep_50k/runs` 汇总当前结果；六条队列各自结束时也会刷新汇总。Ctrl-C / SIGTERM 会停止排队并交给 holder 恢复占用。
+在 tmux 中启动队列即可离开。队列目录的 `sweep.yaml` 保存实际采用的网格和 GPU 列表，`status.json` 记录每项任务的命令、GPU、状态、退出码和结果路径，`logs/` 保留启动日志，`runs/` 下每次实验仍使用独立目录。可以随时执行 `python summarize.py outputs/sweep_50k/runs` 汇总当前结果；各卡队列结束时也会刷新汇总。Ctrl-C / SIGTERM 会停止排队，holder 模式下自动恢复原占用。
 
 `--no-holder` 会跳过 holder 脚本和状态目录检测，直接启动各实验，也不会恢复 GPU 占用。队列的 `status.json` 用 `use_holder` 记录运行方式；单项失败后继续其余任务。其他模型、方法、数据和重置协议保持相同。
+
+一次实验的卡号、holder PID 和临时参数选择只保存在运行命令及输出目录中。需要调整参数网格时，可把临时 YAML 放在 `outputs/` 下，通过 `--config` 传入；仅启动实验无需修改仓库配置或创建 Git 提交。
 
 ## 方法和状态协议
 

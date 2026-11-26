@@ -13,10 +13,21 @@ import sys
 import threading
 from zoneinfo import ZoneInfo
 
+import torch
 import yaml
 
 from data import get_tasks, task_folder
 from utils import ROOT, load_config, resolve_machine_path
+
+
+def select_gpus(values):
+    """Use visible CUDA indices; selecting all does not check GPU occupancy."""
+    gpus = list(range(torch.cuda.device_count())) if values == ["all"] else [int(v) for v in values]
+    if not gpus:
+        raise ValueError("Choose GPUs with --gpus all or --gpus 0 1 2 (all requires visible CUDA GPUs)")
+    if any(gpu < 0 for gpu in gpus) or len(gpus) != len(set(gpus)):
+        raise ValueError("GPU indices must be nonnegative and unique")
+    return gpus
 
 
 def make_plan(settings, output):
@@ -58,6 +69,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default=str(ROOT / "configs/sweep_50k.yaml"))
     parser.add_argument("--output")
+    parser.add_argument("--gpus", nargs="+", help="CUDA indices, e.g. 0 1 2, or all; overrides config.gpus")
     parser.add_argument("--holder", default=str(ROOT.parent / "g/g.py"))
     parser.add_argument("--controller-pid", type=int)
     parser.add_argument("--no-holder", action="store_true", help="Run experiments directly without GPU holder")
@@ -65,6 +77,10 @@ def main():
     args = parser.parse_args()
 
     settings = yaml.safe_load(Path(args.config).read_text())
+    try:
+        settings["gpus"] = select_gpus(args.gpus if args.gpus is not None else settings.get("gpus", []))
+    except ValueError as error:
+        parser.error(str(error))
     timestamp = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y%m%d-%H%M%S")
     output = Path(args.output or ROOT / "outputs" / f"sweep_{timestamp}").resolve()
     jobs = make_plan(settings, output)
@@ -80,7 +96,7 @@ def main():
     if not args.no_holder:
         args.holder = str(resolve_machine_path(args.holder, required=True))
 
-    # Check only requested task folders and weights before releasing GPUs.
+    # Check requested task folders and weights before starting any experiment.
     for job in jobs:
         config = load_config(job["configs"], job["overrides"])
         for path in [Path(config["model"]["checkpoint"]),

@@ -367,7 +367,7 @@ class ModelTests(unittest.TestCase):
 
     def test_upstream_forward_and_backward_equivalence(self):
         # Optional local reference check; standalone copies still run all other tests.
-        original = Path("/mnt/bit/users/liyuanxi/projects/ViTTT/vittt/models")
+        original = ROOT.parent / "ViTTT/vittt/models"
         if not original.is_dir():
             self.skipTest("Original checkout unavailable")
         package = types.ModuleType("ata_reference")

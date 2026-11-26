@@ -27,13 +27,17 @@ MACHINE_PATHS = {
 
 
 def resolve_machine_path(path, *, required=False):
-    """Prefer configured paths; use the other machine only for known defaults."""
+    """Prefer the requested path; fall back between the two known machines."""
     path = Path(os.path.expandvars(str(path))).expanduser()
     if not path.is_absolute():
         path = ROOT / path
+    path = path.resolve()
     candidates = [path]
-    if path in MACHINE_PATHS:
-        candidates.append(MACHINE_PATHS[path])
+    for first, second in MACHINE_PATHS.items():
+        if path == first:
+            candidates.append(second)
+        elif path == second:
+            candidates.append(first)
     for candidate in candidates:
         if candidate.exists():
             return candidate

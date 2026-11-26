@@ -26,6 +26,22 @@ class MachinePathTests(unittest.TestCase):
                 self.assertEqual(resolve_machine_path(primary, required=True), fallback)
                 primary.mkdir()
                 self.assertEqual(resolve_machine_path(primary, required=True), primary)
+                self.assertEqual(resolve_machine_path(fallback, required=True), fallback)
+                fallback.rmdir()
+                self.assertEqual(resolve_machine_path(fallback, required=True), primary)
+
+    def test_relative_holder_path_uses_the_other_machine(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            project = root / "ATA"
+            project.mkdir()
+            primary = root / "g/g.py"
+            fallback = root / "gpu-holder/gpu_hold.py"
+            fallback.parent.mkdir()
+            fallback.touch()
+            with patch("utils.ROOT", project), \
+                    patch.dict("utils.MACHINE_PATHS", {primary: fallback}, clear=True):
+                self.assertEqual(resolve_machine_path("../g/g.py", required=True), fallback)
 
     def test_holder_script_and_state_directory_follow_same_priority(self):
         with tempfile.TemporaryDirectory() as scratch:
@@ -57,8 +73,10 @@ class MachinePathTests(unittest.TestCase):
             }
             # Make the primary paths absent independently of the host machine.
             exists = Path.exists
+
             def available(path):
                 return False if path in defaults else exists(path)
+
             with patch.dict("utils.MACHINE_PATHS", defaults, clear=True), \
                     patch.object(Path, "exists", available):
                 config = load_config()
@@ -68,6 +86,19 @@ class MachinePathTests(unittest.TestCase):
                 self.assertEqual(config["data"]["root"], str(clean))
                 config = load_config(overrides=[f"data.root={root}"])
                 self.assertEqual(config["data"]["root"], str(root))
+
+            def on_source_machine(path):
+                if path in defaults:
+                    return True
+                return False if path in defaults.values() else exists(path)
+
+            with patch.dict("utils.MACHINE_PATHS", defaults, clear=True), \
+                    patch.object(Path, "exists", on_source_machine):
+                config = load_config(overrides=[f"data.root={corruption}",
+                                                f"method.eata.fisher_root={clean}"])
+                self.assertEqual(config["data"]["root"], "/mnt/bit/data/imagenet-c")
+                self.assertEqual(config["method"]["eata"]["fisher_root"],
+                                 "/mnt/bit/data/imagenet/images/val")
 
 
 if __name__ == "__main__":
