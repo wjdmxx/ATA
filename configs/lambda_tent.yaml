@@ -1,0 +1,10 @@
+method:
+  name: lambda_tent
+  parameters: theta
+  lambda_max: 1.0
+  branches:
+    swiglu: true
+    conv: true
+  layers: all
+run:
+  name: lambda_tent_tiny

@@ -458,8 +458,42 @@ class DeYO(Source):
         return prediction_logits(self, images, logits), metrics
 
 
+class _LambdaObjective(Lambda):
+    """Keep new variants' Lambda settings in their own checkpoint state."""
+    def state_dict(self):
+        state = super().state_dict()
+        state["lambda_options"] = {key: deepcopy(self.config[key])
+                                   for key in ("lambda_max", "branches", "layers")}
+        return state
+
+    def load_state_dict(self, state):
+        # Legacy resume_config only compares Lambda settings for the old names.
+        options = {key: self.config[key] for key in ("lambda_max", "branches", "layers")}
+        if state["lambda_options"] != options:
+            raise ValueError("Resume Lambda settings differ from the saved experiment")
+        super().load_state_dict(state)
+
+
+class LambdaTent(_LambdaObjective):
+    """Tent's entropy objective, updating only Lambda theta."""
+    loss = Tent.loss
+
+
+class LambdaDeYO(_LambdaObjective):
+    """DeYO's unchanged filtering and update, optimizing only Lambda theta."""
+    def __init__(self, model, config):
+        super().__init__(model, config)
+        self.options = config["deyo"]
+        self.entropy_threshold = self.options["deyo_margin"] * math.log(model.num_classes)
+        self.entropy_reference = self.options["deyo_margin_e0"] * math.log(model.num_classes)
+
+    perturb = DeYO.perturb
+    step = DeYO.step
+
+
 METHODS = {"source": Source, "tent": Tent, "infomax": InfoMax, "lambda": Lambda,
            "lambda_w0": LambdaW0, "eata": EATA, "sar": SAR, "deyo": DeYO}
+METHODS.update(lambda_tent=LambdaTent, lambda_deyo=LambdaDeYO)
 
 
 def build_method(model, config):

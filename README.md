@@ -242,6 +242,24 @@ python run.py --config configs/test_50k.yaml configs/lambda.yaml \
 
 继续添加方法时，在 `methods.py` 实现 `step(images)`，返回 `(logits, metrics)`，并实现 `reset/state_dict/load_state_dict`，加入 `METHODS`，再提供一个 YAML 配置即可。可以继承现有方法复用目标函数、更新、保存和重置。
 
+## LambdaTent / LambdaDeYO：更换外层适应策略
+
+新增方法名为 `lambda_tent` 和 `lambda_deyo`，配置分别为 `configs/lambda_tent.yaml`、`configs/lambda_deyo.yaml`。原有 `lambda` 继续使用 InfoMax，其他已有方法、配置和模型实现保持原样。
+
+- `lambda_tent`：直接复用 Tent 的预测熵目标和更新流程，只更新 θ。
+- `lambda_deyo`：直接复用 DeYO 的熵/PLPD 筛选、扰动、停止梯度的相加权重和更新流程，只更新 θ；空筛选跳过更新。
+
+两者冻结全部原始参数和 LN，沿用 Lambda 的 `lambda_max`、`branches`、`layers` 设置，默认全部层、两路开启（ViTTT-S 共 5,376 个可训练标量）。DeYO 的 `exclude_blocks` / `exclude_final_norm` 只控制原有 DeYO 的 LN 选择，不控制 `lambda_deyo`；其 θ 范围由 `method.layers` 决定。其余 `method.deyo` 选项照常生效。
+
+两者均从 θ=0 开始，默认返回更新前预测，按现有协议重置 θ 和优化器动量，支持现有 checkpoint 流程；Lambda 设置额外在新方法自己的 checkpoint 状态中校验。学习率沿用 base 的 SGD lr=0.001 起点，尚未调优。
+
+```bash
+# Small / extra 4 域 50K；换用 lambda_deyo.yaml 即运行 DeYO + Lambda。
+python run.py --config configs/val_50k.yaml configs/lambda_tent.yaml \
+  --set model.name=small model.checkpoint=weights/pretrained/vittt_small.pth \
+  run.name=lambda_tent_small --dry-run
+```
+
 ## LambdaW0：同时适应 loss 与快权重初值
 
 `configs/lambda_w0.yaml` 的方法名是 `lambda_w0`。外层目标仍为 InfoMax，同时更新 θ 和选中 TTT 分支的快权重初值 W0：SwiGLU 为原模型的 `w1/w2`，卷积为 `w3`。W0 从官方预训练权重开始，θ 从 0 开始；QKV、投影、MLP、全部 LN 和分类头冻结。内层更新仍使用原来的步长和归一化。
