@@ -287,6 +287,18 @@ python run.py --config configs/val_50k.yaml configs/lambda_w0.yaml \
   method.optimizer.lr=0.3 method.w0_lr=0.00001 run.name=lambda_w0_small
 ```
 
+### LambdaW0First6：只更新前六层 W0
+
+新增 `configs/lambda_w0_first6.yaml`，方法名为 `lambda_w0_first6`。继承原 `lambda_w0` 的 InfoMax 目标、优化器和状态重置，仅将 W0（SwiGLU 的 w1/w2、卷积的 w3）更新限制在 blocks.0～5；`method.layers` 继续控制 θ 的范围，默认全部 12 层。其余原始参数及全部 LN 冻结。分支开关照常同时控制该路的 θ 和 W0。
+
+原 `lambda_w0` 和已有配置保持原样。新配置的 `method.w0_lr=0.001`，θ 学习率仍由 `method.optimizer.lr` 独立指定。每次任务重置恢复全部 θ=0、预训练 W0 和两组动量；checkpoint 额外校验 Lambda 设置。
+
+```bash
+python run.py --config configs/val_50k.yaml configs/lambda_w0_first6.yaml \
+  --set model.name=small model.checkpoint=weights/pretrained/vittt_small.pth \
+  method.optimizer.lr=0.03 method.w0_lr=0.001 --dry-run
+```
+
 ## EATA、SAR、DeYO
 
 三个方法按作者官方代码移植，固定提交、文件哈希、接口调整和许可证见 [THIRD_PARTY.md](THIRD_PARTY.md)。生产代码只保留必要的更新和依赖，官方 checkout 独立存放。

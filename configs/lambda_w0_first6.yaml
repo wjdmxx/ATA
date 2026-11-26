@@ -1,0 +1,13 @@
+method:
+  name: lambda_w0_first6
+  parameters: theta_w0
+  lambda_max: 1.0
+  branches:
+    swiglu: true
+    conv: true
+  layers: all                    # Theta scope; W0 is restricted to blocks 0..5.
+  optimizer:
+    lr: 0.3
+  w0_lr: 0.001
+run:
+  name: lambda_w0_first6_tiny

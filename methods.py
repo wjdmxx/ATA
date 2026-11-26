@@ -474,6 +474,20 @@ class _LambdaObjective(Lambda):
         super().load_state_dict(state)
 
 
+class LambdaW0First6(LambdaW0, _LambdaObjective):
+    """Keep Lambda's theta scope, restricting W0 adaptation to blocks 0..5."""
+    def __init__(self, model, config):
+        super().__init__(model, config)
+        for block in model.blocks[6:]:
+            for key in ("w1", "w2", "w3"):
+                getattr(block.attn, key).requires_grad_(False)
+        group = self.optimizer.param_groups[1]
+        group["params"] = [parameter for parameter in group["params"] if parameter.requires_grad]
+        self.parameter_names = [name for name, parameter in model.named_parameters()
+                                if parameter.requires_grad]
+        self.initial_optimizer = deepcopy(self.optimizer.state_dict())
+
+
 class LambdaTent(_LambdaObjective):
     """Tent's entropy objective, updating only Lambda theta."""
     loss = Tent.loss
@@ -494,6 +508,7 @@ class LambdaDeYO(_LambdaObjective):
 METHODS = {"source": Source, "tent": Tent, "infomax": InfoMax, "lambda": Lambda,
            "lambda_w0": LambdaW0, "eata": EATA, "sar": SAR, "deyo": DeYO}
 METHODS.update(lambda_tent=LambdaTent, lambda_deyo=LambdaDeYO)
+METHODS.update(lambda_w0_first6=LambdaW0First6)
 
 
 def build_method(model, config):

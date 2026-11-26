@@ -25,6 +25,7 @@
 - `method.branches.swiglu/conv` 独立控制在哪一路加入 Lambda，默认均开启；关闭后该路仍执行原始 TTT。
 - `method.layers: all` 按实际模型层数选择，也可指定从 0 开始的 block 编号。SwiGLU 每头每输出通道独立 θ，卷积每通道独立 θ；ViTTT-S 默认共 5,376 个可训练标量。
 - `lambda_w0` 在同一 InfoMax 目标下更新 θ 与选中层/分支的快权重初值：SwiGLU 的 w1/w2、卷积的 w3。`method.optimizer.lr` 控制 θ，`method.w0_lr` 独立控制 W0；其余参数冻结。任务重置恢复 θ=0、预训练 W0 和两组动量。
+- `lambda_w0_first6` 继承原 `lambda_w0`，只将 W0 适应限制到 blocks.0～5，θ 仍由 `method.layers` 选择、默认全部层。两路默认开启；W0 学习率配置起点为 0.001。原 `lambda_w0`、其他已有方法和配置保持原样；新方法复用原 InfoMax、重置与更新流程，并在 checkpoint 方法状态中校验 Lambda 设置。
 - EATA 更新全部 LN，使用熵/非冗余筛选和 Fisher 正则；启动时以 2000 张随机 clean 图片及模型伪标签计算 batch 梯度平方平均，Fisher 仅驻内存，清单写入 fisher_samples.json。
 - SAR、DeYO 更新 blocks.0～8 的 LN，冻结 blocks.9～11 及最终 norm，全部 block 仍参与前向。SAR 使用官方 SAM+SGD；内部恢复保留官方 SGD 动量与新 EMA，外部跨域重置完整清空。DeYO 使用熵/PLPD 筛选与相加的两项权重，默认 4×4 patch 重排。
 - 全部方法统一 eval；当前模型 Dropout=0、DropPath=Identity。EATA / SAR 的扩展 checkpoint 和旧 checkpoint 兼容后置，当前按默认不保存 checkpoint 使用。官方版本、移植细节和许可证见 THIRD_PARTY.md，完整 loss/超参数见 README。
