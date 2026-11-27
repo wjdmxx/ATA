@@ -1,0 +1,5 @@
+method:
+  name: tent_no_norm2
+  parameters: norm
+run:
+  name: tent_no_norm2_tiny

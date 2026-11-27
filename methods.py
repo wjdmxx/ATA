@@ -72,14 +72,18 @@ class Source:
 
 
 class Tent(Source):
+    excluded_norm = None
+
     def __init__(self, model, config):
+        if self.excluded_norm is not None and config["parameters"] != "norm":
+            raise ValueError("Tent LN ablations require method.parameters=norm")
         super().__init__(model, config)
 
         # Keep dropout/stochastic depth off. LayerNorm behaves the same in eval.
         if config["parameters"] == "norm":
-            for module in model.modules():
+            for name, module in model.named_modules():
                 if isinstance(module, nn.LayerNorm):
-                    module.requires_grad_(True)
+                    module.requires_grad_(name.rsplit(".", 1)[-1] != self.excluded_norm)
         elif config["parameters"] == "all":
             model.requires_grad_(True)
         else:
@@ -123,6 +127,16 @@ class Tent(Source):
         # before_update returns the final adaptation forward's logits, as Tent
         # does. With multiple steps these precede only the LAST optimizer step.
         return logits.detach(), metrics
+
+
+class TentNoNorm1(Tent):
+    """Freeze the LayerNorm before TTT in every block."""
+    excluded_norm = "norm1"
+
+
+class TentNoNorm2(Tent):
+    """Freeze the LayerNorm before the MLP in every block."""
+    excluded_norm = "norm2"
 
 
 class InfoMax(Tent):
@@ -509,6 +523,7 @@ METHODS = {"source": Source, "tent": Tent, "infomax": InfoMax, "lambda": Lambda,
            "lambda_w0": LambdaW0, "eata": EATA, "sar": SAR, "deyo": DeYO}
 METHODS.update(lambda_tent=LambdaTent, lambda_deyo=LambdaDeYO)
 METHODS.update(lambda_w0_first6=LambdaW0First6)
+METHODS.update(tent_no_norm1=TentNoNorm1, tent_no_norm2=TentNoNorm2)
 
 
 def build_method(model, config):

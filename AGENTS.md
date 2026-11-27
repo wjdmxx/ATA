@@ -18,6 +18,7 @@
 
 - Source 保留模型内层 TTT，只是不进行外层 TTA。
 - Tent 最小化预测熵；InfoMax 使用 `mean(H(p)) - H(mean(p))`。两者默认只更新全部 LayerNorm 的 weight / bias，包含最终 LN。
+- Tent 的 LN 位置消融：`tent_no_norm1` 冻结全部 block 的 TTT 前 LN（`norm1`），更新 `norm2` 和最终 `norm`；`tent_no_norm2` 冻结 MLP 前 LN（`norm2`），更新 `norm1` 和最终 `norm`。两者只支持 `method.parameters=norm`，ViTTT-S 各更新 9,984 个标量，复用原 Tent 熵目标、重置和 checkpoint 流程；原 Tent 不变。配置继承 base 学习率，未单独调优，尚未启动消融实验。
 - Lambda 外层同样使用 InfoMax，始终只更新 θ，全部原始参数和 LN 冻结。
 - 新增 `lambda_tent` / `lambda_deyo`：分别复用 Tent 的熵目标、DeYO 的完整筛选/扰动/加权更新流程，只优化 Lambda θ。原有方法和配置保持不变；新方法沿用 Lambda 的层/分支选择，默认全部层、两路开启，不使用 DeYO 的 LN 排除层设置。重置恢复 θ=0 并清空动量；两者支持 checkpoint，额外在方法状态中校验 Lambda 设置，不改旧恢复逻辑。学习率沿用 base 起点，需单独调优。
 - Lambda 内层 loss 为 `scale/N * sum(-v_hat*v + 0.5*lambda*v_hat²)`；导数为 `(lambda*v_hat-v)/N*scale`，保持原始梯度归一化和内层步长 1。

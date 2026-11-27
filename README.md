@@ -197,6 +197,26 @@ python -u sweep.py --config configs/sweep_baselines_val_50k.yaml --gpus all --no
 
 Tent / InfoMax 可用 `method.parameters=all` 显式启用全部参数适应；Lambda 始终只更新 θ。默认 `steps=1`。`method.prediction=before_update` 返回最后一次适应前向的预测，发生在最后一次优化器更新之前，匹配 Tent 的返回方式；多步时已经包含前面步骤的更新。`after_update` 则在完成所有更新后再做一次前向并评分。真实标签仅由评测器计算指标，不进入 `method.step(images)`，代码不根据测试标签选择最佳权重。
 
+### Tent：LN 位置消融
+
+原 `tent` 默认更新所有 LN。新增两个方法，只改变外层适应的参数范围，复用 Tent 的熵目标、更新、重置和 checkpoint 流程：
+
+| 方法 / 配置文件 | 冻结的 LN | 更新的 LN | ViTTT-S 可训练标量 |
+| --- | --- | --- | ---: |
+| `tent` / `configs/tent.yaml` | 无 | 全部 block 的 `norm1`、`norm2`，以及最终 `norm` | 19,200 |
+| `tent_no_norm1` / `configs/tent_no_norm1.yaml` | 全部 block 的 `norm1`（TTT 前） | 全部 block 的 `norm2`，以及最终 `norm` | 9,984 |
+| `tent_no_norm2` / `configs/tent_no_norm2.yaml` | 全部 block 的 `norm2`（MLP 前） | 全部 block 的 `norm1`，以及最终 `norm` | 9,984 |
+
+两个消融都更新选中 LN 的 weight/bias，其余模型参数冻结，全部 block 和原始内层 TTT 照常前向；仅支持 `method.parameters=norm`。每个任务重置全部模型参数和优化器动量。方法名随 checkpoint 保存，恢复时不允许切换消融范围。配置不固化调参结果，学习率由 `configs/base.yaml` 继承或命令行覆盖。
+
+```bash
+# Small / 正式 15 域、每域 50K；换成 tent_no_norm2.yaml 即冻结 MLP 前 LN。
+# lr=1e-5 是原 Tent 的已运行设置，两个消融尚未单独调优。
+python run.py --config configs/test_50k.yaml configs/tent_no_norm1.yaml \
+  --set model.name=small model.checkpoint=weights/pretrained/vittt_small.pth \
+  method.optimizer.lr=0.00001 run.name=tent_no_norm1_small --dry-run
+```
+
 ### Lambda：适应内层 loss
 
 每个输出通道使用独立的 `lambda = lambda_max * tanh(theta)`，θ 初始为 0。内层 loss 为 `scale/N * sum(-v_hat*v + 0.5*lambda*v_hat²)`，生产代码不显式求 loss，而是把原来的导数 `-v/N*scale` 替换为 `(lambda*v_hat-v)/N*scale`。SwiGLU 的 N 是 token 数，卷积分支的 N 是空间位置数；原始归一化、内层步长 1 和两路前向保持原样。λ 可以为正或负，其范围为 `(-lambda_max, lambda_max)`。
